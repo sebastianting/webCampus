@@ -3,13 +3,20 @@ import ssl
 
 class URL:
     def __init__(self, url):
-        if "://" in url:
-            self.scheme, url = url.split("://", 1)
-            assert self.scheme in ["http", "https", "file"]
-        elif ":" in url:
-            self.scheme, url = url.split(":", 1)
-            assert self.scheme in ["data"]
-            self.mediatype, self.body = url.split(",", 1)
+        scheme, rest = url.split(":", 1)
+
+        if scheme in ["http", "https", "file"]:
+            self.scheme = scheme
+            url = rest[2:]
+        elif scheme in ["data"]:
+            self.scheme = scheme
+            url = rest
+        elif scheme == "view-source":
+            self.scheme = scheme
+            self.inner_scheme, url = rest.split("://", 1)
+            scheme = self.inner_scheme
+        else:
+            raise ValueError(f"Unknown scheme: {scheme}")
 
         if self.scheme == "file":
             self.path = url
@@ -25,9 +32,9 @@ class URL:
         self.headers = {"Host": host}
         self.path = "/" + url
 
-        if self.scheme == "http":
+        if scheme == "http":
             self.port = 80
-        elif self.scheme == "https":
+        elif scheme == "https":
             self.port = 443
 
         if ":" in self.headers["Host"]:
@@ -37,6 +44,9 @@ class URL:
  
 
     def request(self):
+
+        use_scheme = self.inner_scheme if self.scheme == "view-source" else self.scheme
+
         if self.scheme == "file":
             with open(self.path, 'r', encoding="utf-8") as file:
                 return file.read()
@@ -54,7 +64,7 @@ class URL:
         self.headers |= {"User-Agent" : "25Ting following browser.engineering"}
 
         s.connect((self.headers["Host"], self.port))
-        if self.scheme == "https":
+        if use_scheme == "https":
             ctx = ssl.create_default_context()
             s = ctx.wrap_socket(s, server_hostname=self.headers["Host"])
 
@@ -98,7 +108,7 @@ def show(body):
             in_tag = False
         elif not in_tag:
             if body[i] == '&':
-                end = body.find(';')
+                end = body.find(';', i)
                 if end != -1:
                     entity = body[i:end+1]
                     print(entity_map.get(entity, entity), end="")
@@ -109,9 +119,15 @@ def show(body):
         i += 1
     print()
 
+def source(body):
+    print(body)
+
 def load(url):
     body = url.request()
-    show(body)
+    if url.scheme != "view-source":
+        show(body)
+    else:
+        source(body)
 
 if __name__ == "__main__":
     import sys
