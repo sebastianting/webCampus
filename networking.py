@@ -1,16 +1,23 @@
 import socket
-import sys
 import ssl
-import os
 
 class URL:
     def __init__(self, url):
-        self.scheme, url = url.split("://", 1)
-        assert self.scheme in ["http", "https", "file"]
+        if "://" in url:
+            self.scheme, url = url.split("://", 1)
+            assert self.scheme in ["http", "https", "file"]
+        elif ":" in url:
+            self.scheme, url = url.split(":", 1)
+            assert self.scheme in ["data"]
+            self.mediatype, self.body = url.split(",", 1)
 
         if self.scheme == "file":
             self.path = url
             return 
+
+        if self.scheme == "data":
+            self.path = url
+            return
 
         if "/" not in url:
             url = url + "/"
@@ -33,6 +40,9 @@ class URL:
         if self.scheme == "file":
             with open(self.path, 'r', encoding="utf-8") as file:
                 return file.read()
+
+        if self.scheme == "data":
+            return self.body
 
         s = socket.socket(
             family=socket.AF_INET,
@@ -73,17 +83,31 @@ class URL:
 
         return content
 
-
+entity_map = {
+    '&lt;' : '<',
+    '&rt;' : '>',
+}
 
 def show(body):
     in_tag = False
-    for c in body:
-        if c == "<":
+    i = 0
+    while i < len(body):
+        if body[i] == '<':
             in_tag = True
-        elif c == ">":
+        elif body[i] == '>':
             in_tag = False
         elif not in_tag:
-            print(c, end="")
+            if body[i] == '&':
+                end = body.find(';')
+                if end != -1:
+                    entity = body[i:end+1]
+                    print(entity_map.get(entity, entity), end="")
+                    i = end + 1
+                    continue
+
+            print(body[i], end="")
+        i += 1
+    print()
 
 def load(url):
     body = url.request()
@@ -91,14 +115,12 @@ def load(url):
 
 if __name__ == "__main__":
     import sys
-    if len(sys.argv) > 2:
-        print("Please provide 1 url")
-        sys.exit()
-    elif len(sys.argv) == 1:
+    if len(sys.argv) == 1:
+        import os
         default_path = os.path.abspath("debug.txt")
         url_string = f"file://{default_path}"
         load(URL(url_string))
         sys.exit()
 
-    load(URL(sys.argv[1]))
+    load(URL(" ".join(sys.argv[1:])))
 
