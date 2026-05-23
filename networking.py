@@ -1,7 +1,11 @@
 import socket
 import ssl
+import time
 
 class URL:
+
+    cache = {}
+
     def __init__(self, url):
         scheme, rest = url.split(":", 1)
 
@@ -51,6 +55,16 @@ class URL:
         if redirect_count > 12:
             raise Exception("Too many redirects")
 
+        url_string = self.scheme + "://" + self.headers["Host"] + self.path
+
+        if url_string in self.cache:
+            entry = self.cache[url_string]
+            cache_control = entry["headers"].get("cache-control", "")
+            age = time.time() - entry["timestamp"]
+            max_age = int(cache_control.split("max-age=")[-1]) if "max-age=" in cache_control else 0
+            if age < max_age:
+                return entry["body"].decode("utf-8")
+
         use_scheme = self.inner_scheme if self.scheme == "view-source" else self.scheme
 
         if self.scheme == "file":
@@ -62,7 +76,7 @@ class URL:
 
         host = self.headers["Host"]
         if host in self.sockets:
-            s, response_file = self.sockets[host]
+            s, response = self.sockets[host]
         else:
             s = socket.socket(
                 family=socket.AF_INET,
@@ -77,14 +91,14 @@ class URL:
             if use_scheme == "https":
                 ctx = ssl.create_default_context()
                 s = ctx.wrap_socket(s, server_hostname=self.headers["Host"])
+ 
+            response = s.makefile("rb", newline="\r\n")
 
         request = "GET {} HTTP/1.1\r\n".format(self.path)
         for name, value in self.headers.items():
             request += "{}: {}\r\n".format(name, value)
         request += "\r\n"
         s.send(request.encode("utf8"))
-
-        response = s.makefile("rb", newline="\r\n")
 
         statusline = response.readline()
         version, status, explanation = statusline.decode("utf-8").split(" ", 2)
@@ -108,8 +122,16 @@ class URL:
         else:
             content = response.read()
 
-        self.sockets[host] = {s, response}
-        #s.close()
+        self.sockets[host] = (s, response)
+
+        cache_control = response_headers.get("cache-control", "")
+        if status == "200" and "no-store" not in cache_control:
+            if "max-age=" in cache_control or cache_control == "":
+                self.cache[url_string] = {
+                    "body": content,
+                    "headers": response_headers,
+                    "timestamp": time.time()
+                }
 
         return content.decode("utf-8")
 
