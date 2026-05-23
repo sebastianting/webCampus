@@ -41,6 +41,8 @@ class URL:
             self.headers["Host"], port= self.headers["Host"].split(":", 1)
             self.port = int(port)
 
+        self.sockets = {}
+
  
 
     def request(self):
@@ -54,19 +56,23 @@ class URL:
         if self.scheme == "data":
             return self.body
 
-        s = socket.socket(
-            family=socket.AF_INET,
-            type=socket.SOCK_STREAM,
-            proto=socket.IPPROTO_TCP,
-        )
+        host = self.headers["Host"]
+        if host in self.sockets:
+            s, response_file = self.sockets[host]
+        else:
+            s = socket.socket(
+                family=socket.AF_INET,
+                type=socket.SOCK_STREAM,
+                proto=socket.IPPROTO_TCP,
+            )
 
-        self.headers |= {"Connection" : "close"}
-        self.headers |= {"User-Agent" : "25Ting following browser.engineering"}
+            self.headers |= {"Connection" : "keep-alive"}
+            self.headers |= {"User-Agent" : "25Ting following browser.engineering"}
 
-        s.connect((self.headers["Host"], self.port))
-        if use_scheme == "https":
-            ctx = ssl.create_default_context()
-            s = ctx.wrap_socket(s, server_hostname=self.headers["Host"])
+            s.connect((self.headers["Host"], self.port))
+            if use_scheme == "https":
+                ctx = ssl.create_default_context()
+                s = ctx.wrap_socket(s, server_hostname=self.headers["Host"])
 
         request = "GET {} HTTP/1.0\r\n".format(self.path)
         for name, value in self.headers.items():
@@ -74,24 +80,29 @@ class URL:
         request += "\r\n"
         s.send(request.encode("utf8"))
 
-        response = s.makefile("r", encoding="utf8",  newline="\r\n")
+        response = s.makefile("rb", newline="\r\n")
 
         statusline = response.readline()
-        version, status, explanation = statusline.split(" ", 2)
+        version, status, explanation = statusline.split(b" ", 2)
         response_headers = {}
         while True:
             line = response.readline()
-            if line == "\r\n": break
-            header, value = line.split(":", 1)
-            response_headers[header.casefold()] = value.strip()
+            if line == b"\r\n": break
+            header, value = line.split(b":", 1)
+            response_headers[header.decode().casefold()] = value.strip()
 
         assert "transfer-encoding" not in response_headers
         assert "content-encoding" not in response_headers
 
-        content = response.read()
-        s.close()
+        if "content-length" in response_headers:
+            content = response.read(int(response_headers["content-length"]))
+        else:
+            content = response.read()
 
-        return content
+        self.sockets[host] = {s, response}
+        #s.close()
+
+        return content.decode("utf-8")
 
 entity_map = {
     '&lt;' : '<',
