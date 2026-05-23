@@ -43,9 +43,13 @@ class URL:
 
         self.sockets = {}
 
- 
 
     def request(self):
+        return self._request(0)
+
+    def _request(self, redirect_count):
+        if redirect_count > 12:
+            raise Exception("Too many redirects")
 
         use_scheme = self.inner_scheme if self.scheme == "view-source" else self.scheme
 
@@ -74,7 +78,7 @@ class URL:
                 ctx = ssl.create_default_context()
                 s = ctx.wrap_socket(s, server_hostname=self.headers["Host"])
 
-        request = "GET {} HTTP/1.0\r\n".format(self.path)
+        request = "GET {} HTTP/1.1\r\n".format(self.path)
         for name, value in self.headers.items():
             request += "{}: {}\r\n".format(name, value)
         request += "\r\n"
@@ -83,16 +87,21 @@ class URL:
         response = s.makefile("rb", newline="\r\n")
 
         statusline = response.readline()
-        version, status, explanation = statusline.split(b" ", 2)
+        version, status, explanation = statusline.decode("utf-8").split(" ", 2)
         response_headers = {}
         while True:
-            line = response.readline()
-            if line == b"\r\n": break
-            header, value = line.split(b":", 1)
-            response_headers[header.decode().casefold()] = value.strip()
+            line = response.readline().decode("utf-8")
+            if line == "\r\n": break
+            header, value = line.split(":", 1)
+            response_headers[header.casefold()] = value.strip()
 
         assert "transfer-encoding" not in response_headers
         assert "content-encoding" not in response_headers
+        if status.startswith("3"):
+            location = response_headers["location"]
+            if location.startswith("/"):
+                location = self.scheme + "://" + host + location
+            return URL(location)._request(redirect_count + 1)
 
         if "content-length" in response_headers:
             content = response.read(int(response_headers["content-length"]))
