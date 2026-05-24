@@ -1,6 +1,7 @@
 import socket
 import ssl
 import time
+import gzip
 
 class URL:
 
@@ -54,6 +55,15 @@ class URL:
     def _request(self, redirect_count):
         if redirect_count > 12:
             raise Exception("Too many redirects")
+        
+        use_scheme = self.inner_scheme if self.scheme == "view-source" else self.scheme
+        
+        if self.scheme == "file":
+            with open(self.path, 'r', encoding="utf-8") as file:
+                return file.read()
+        
+        if self.scheme == "data":
+            return self.body
 
         url_string = self.scheme + "://" + self.headers["Host"] + self.path
 
@@ -64,15 +74,6 @@ class URL:
             max_age = int(cache_control.split("max-age=")[-1]) if "max-age=" in cache_control else 0
             if age < max_age:
                 return entry["body"].decode("utf-8")
-
-        use_scheme = self.inner_scheme if self.scheme == "view-source" else self.scheme
-
-        if self.scheme == "file":
-            with open(self.path, 'r', encoding="utf-8") as file:
-                return file.read()
-
-        if self.scheme == "data":
-            return self.body
 
         host = self.headers["Host"]
         if host in self.sockets:
@@ -86,6 +87,7 @@ class URL:
 
             self.headers |= {"Connection" : "keep-alive"}
             self.headers |= {"User-Agent" : "25Ting following browser.engineering"}
+            self.headers |= {"Accept-Encoding" : "gzip"}
 
             s.connect((self.headers["Host"], self.port))
             if use_scheme == "https":
@@ -109,18 +111,28 @@ class URL:
             header, value = line.split(":", 1)
             response_headers[header.casefold()] = value.strip()
 
-        assert "transfer-encoding" not in response_headers
-        assert "content-encoding" not in response_headers
         if status.startswith("3"):
             location = response_headers["location"]
             if location.startswith("/"):
                 location = self.scheme + "://" + host + location
             return URL(location)._request(redirect_count + 1)
 
-        if "content-length" in response_headers:
+        if "transfer-encoding" in response_headers and response_headers["transfer-encoding"] == "chunked":
+            content = b""
+            while True:
+                size_line = response.readline()
+                chunk_size = int(size_line.strip(), 16)
+                if chunk_size == 0:
+                    break
+                content += response.read(chunk_size)
+                response.read(2)
+        elif "content-length" in response_headers:
             content = response.read(int(response_headers["content-length"]))
         else:
             content = response.read()
+        
+        if response_headers.get("content-encoding") == "gzip":
+            content = gzip.decompress(content)
 
         self.sockets[host] = (s, response)
 
