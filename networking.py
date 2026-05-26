@@ -152,9 +152,10 @@ entity_map = {
     '&rt;' : '>',
 }
 
-def show(body):
+def lex(body):
     in_tag = False
     i = 0
+    text = ""
     while i < len(body):
         if body[i] == '<':
             in_tag = True
@@ -165,23 +166,23 @@ def show(body):
                 end = body.find(';', i)
                 if end != -1:
                     entity = body[i:end+1]
-                    print(entity_map.get(entity, entity), end="")
+                    text += entity_map.get(entity, entity,)
                     i = end + 1
                     continue
 
-            print(body[i], end="")
+            text += body[i]
         i += 1
-    print()
+    return text
 
 def source(body):
     print(body)
 
-def load(url):
-    body = url.request()
-    if url.scheme != "view-source":
-        show(body)
-    else:
-        source(body)
+#def load(url):
+#    body = url.request()
+#    if url.scheme != "view-source":
+#        show(body)
+#    else:
+#        source(body)
 
 if __name__ == "__main__":
     import sys
