@@ -5,6 +5,8 @@ WIDTH, HEIGHT = 800, 600
 
 HSTEP, VSTEP = 13, 18
 
+SCROLL_STEP = 100
+
 class Browser:
     def __init__(self):
         self.window = tkinter.Tk()
@@ -13,17 +15,20 @@ class Browser:
             width=WIDTH,
             height=HEIGHT
         )
-        self.canvas.pack()
+        self.canvas.pack(fill=tkinter.BOTH, expand=1)
         self.scroll = 0
         self.window.bind("<Down>", self.scrolldown)
+        self.window.bind("<Up>", self.scrollup)
+        self.window.bind("<MouseWheel>", self.onscroll)
+        self.window.bind("<Configure>", self.resize)
 
     def load(self, url):
         body = url.request()
         if url.scheme != "view-source":
-            text = lex(body)
+            self.text = lex(body)
         else:
-            text = source(body)
-        self.display_list = layout(text)
+            self.text = source(body)
+        self.display_list = layout(self.text)
         self.draw()
 
     def draw(self):
@@ -33,9 +38,33 @@ class Browser:
             if y + VSTEP < self.scroll: continue
             self.canvas.create_text(x, y - self.scroll, text=c)
 
-    def scrolldown(self, e):
-        SCROLL_STEP = 100
-        self.scroll += SCROLL_STEP
+    def onscroll(self, e):
+        if e.delta > 0:
+            self.scrolldown(e)
+        else:
+            self.scrollup(e)
+
+    def scrolldown(self, e=None):
+        if e.delta:
+            self.scroll += e.delta * 4
+        else:
+            self.scroll += SCROLL_STEP
+        self.draw()
+
+    def scrollup(self, e=None):
+        if e.delta:
+            if self.scroll + e.delta < 0 : self.scroll = 0
+            else: self.scroll += e.delta * 4
+        else:
+            if self.scroll - SCROLL_STEP < 0: self.scroll = 0
+            else : self.scroll -= SCROLL_STEP
+        self.draw()
+
+    def resize(self, e):
+        global WIDTH, HEIGHT
+        WIDTH = e.width
+        HEIGHT = e.height
+        self.display_list = layout(self.text)
         self.draw()
 
         
@@ -53,7 +82,12 @@ def layout(text):
 
     cursor_x, cursor_y = HSTEP, VSTEP
     for c in text:
+
         display_list.append((cursor_x, cursor_y, c))
+        if c == "\n":
+            cursor_y += (VSTEP + 10)
+            cursor_x = HSTEP
+            continue
         cursor_x += HSTEP
         if cursor_x >= WIDTH - HSTEP:
             cursor_y += VSTEP
