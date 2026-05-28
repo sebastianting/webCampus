@@ -8,45 +8,46 @@ class URL:
     cache = {}
 
     def __init__(self, url):
-        scheme, rest = url.split(":", 1)
+        try:
+            scheme, rest = url.split(":", 1)
 
-        if scheme in ["http", "https", "file"]:
-            self.scheme = scheme
-            url = rest[2:]
-        elif scheme in ["data"]:
-            self.scheme = scheme
-            url = rest
-        elif scheme == "view-source":
-            self.scheme = scheme
-            self.inner_scheme, url = rest.split("://", 1)
-            scheme = self.inner_scheme
-        else:
-            raise ValueError(f"Unknown scheme: {scheme}")
+            if scheme in ["http", "https", "file"]:
+                self.scheme = scheme
+                url = rest[2:]
+            elif scheme in ["data", "about"]:
+                self.scheme = scheme
+                self.path = rest
+                return
+            elif scheme == "view-source":
+                self.scheme = scheme
+                self.inner_scheme, url = rest.split("://", 1)
+                scheme = self.inner_scheme
+            else:
+                raise ValueError(f"Unknown scheme: {scheme}")
 
-        if self.scheme == "file":
-            self.path = url
-            return 
+            if self.scheme == "file":
+                self.path = url
+                return 
 
-        if self.scheme == "data":
-            self.path = url
-            return
+            if "/" not in url:
+                url = url + "/"
+            host, url = url.split("/", 1)
+            self.headers = {"Host": host}
+            self.path = "/" + url
 
-        if "/" not in url:
-            url = url + "/"
-        host, url = url.split("/", 1)
-        self.headers = {"Host": host}
-        self.path = "/" + url
+            if scheme == "http":
+                self.port = 80
+            elif scheme == "https":
+                self.port = 443
 
-        if scheme == "http":
-            self.port = 80
-        elif scheme == "https":
-            self.port = 443
+            if ":" in self.headers["Host"]:
+                self.headers["Host"], port= self.headers["Host"].split(":", 1)
+                self.port = int(port)
 
-        if ":" in self.headers["Host"]:
-            self.headers["Host"], port= self.headers["Host"].split(":", 1)
-            self.port = int(port)
-
-        self.sockets = {}
+            self.sockets = {}
+        except (ValueError, IndexError) as e:
+            self.scheme = "about"
+            self.path = "blank"
 
 
     def request(self):
@@ -62,8 +63,8 @@ class URL:
             with open(self.path, 'r', encoding="utf-8") as file:
                 return file.read()
         
-        if self.scheme == "data":
-            return self.body
+        if self.scheme in ["data", "about"]:
+            return self.path
 
         url_string = self.scheme + "://" + self.headers["Host"] + self.path
 
@@ -176,13 +177,6 @@ def lex(body):
 
 def source(body):
     print(body)
-
-#def load(url):
-#    body = url.request()
-#    if url.scheme != "view-source":
-#        show(body)
-#    else:
-#        source(body)
 
 if __name__ == "__main__":
     import sys

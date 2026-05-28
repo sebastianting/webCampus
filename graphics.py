@@ -25,11 +25,18 @@ class Browser:
         self.canvas.bind("<B1-Motion>", self.on_drag)
 
     def load(self, url):
-        body = url.request()
-        if url.scheme != "view-source":
-            self.text = lex(body)
-        else:
+        try:
+            body = url.request()
+        except ValueError as e:
+            url.scheme = "about"
+            body = "blank"
+        if url.scheme == "view-source":
             self.text = source(body)
+        elif url.scheme == "about":
+            if body == "blank":
+                self.text = [""]
+        else:
+            self.text = lex(body)
         self.display_list = layout(self.text)
         self.max_height = self.display_list[-1][1]
         self.draw()
@@ -41,10 +48,11 @@ class Browser:
             if y + VSTEP < self.scroll: continue
             self.canvas.create_text(x, y - self.scroll, text=c)
 
-        thumb_height = HEIGHT * HEIGHT / self.max_height
-        thumb_top = self.scroll * HEIGHT / self.max_height
-        thumb_bot = thumb_top + thumb_height
-        self.canvas.create_rectangle(WIDTH - HSTEP, thumb_top, WIDTH, thumb_bot, fill='#5A99F0', width=0, activefill='#63BFF5')
+        if self.max_height > HEIGHT:
+            thumb_height = HEIGHT * HEIGHT / self.max_height
+            thumb_top = self.scroll * HEIGHT / self.max_height
+            thumb_bot = thumb_top + thumb_height
+            self.canvas.create_rectangle(WIDTH - HSTEP, thumb_top, WIDTH, thumb_bot, fill='#5A99F0', width=0, activefill='#63BFF5')
 
     def onscroll(self, e):
         if e.delta > 0:
