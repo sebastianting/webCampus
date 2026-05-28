@@ -21,6 +21,8 @@ class Browser:
         self.window.bind("<Up>", self.scrollup)
         self.window.bind("<MouseWheel>", self.onscroll)
         self.window.bind("<Configure>", self.resize)
+        self.canvas.bind("<ButtonPress-1>", self.on_click)
+        self.canvas.bind("<B1-Motion>", self.on_drag)
 
     def load(self, url):
         body = url.request()
@@ -29,6 +31,7 @@ class Browser:
         else:
             self.text = source(body)
         self.display_list = layout(self.text)
+        self.max_height = self.display_list[-1][1]
         self.draw()
 
     def draw(self):
@@ -38,6 +41,11 @@ class Browser:
             if y + VSTEP < self.scroll: continue
             self.canvas.create_text(x, y - self.scroll, text=c)
 
+        thumb_height = HEIGHT * HEIGHT / self.max_height
+        thumb_top = self.scroll * HEIGHT / self.max_height
+        thumb_bot = thumb_top + thumb_height
+        self.canvas.create_rectangle(WIDTH - HSTEP, thumb_top, WIDTH, thumb_bot, fill='#5A99F0', width=0, activefill='#63BFF5')
+
     def onscroll(self, e):
         if e.delta > 0:
             self.scrolldown(e)
@@ -45,10 +53,13 @@ class Browser:
             self.scrollup(e)
 
     def scrolldown(self, e=None):
+        global SCROLLBAR_BOT, SCROLLBAR_TOP
         if e.delta:
-            self.scroll += e.delta * 4
+            if self.scroll + e.delta > self.max_height: self.scroll = self.max_height
+            else: self.scroll += e.delta * 4
         else:
-            self.scroll += SCROLL_STEP
+            if self.scroll + SCROLL_STEP > self.max_height: self.scroll = self.max_height
+            else: self.scroll += SCROLL_STEP
         self.draw()
 
     def scrollup(self, e=None):
@@ -65,17 +76,16 @@ class Browser:
         WIDTH = e.width
         HEIGHT = e.height
         self.display_list = layout(self.text)
+        self.max_height = self.display_list[-1][1]
         self.draw()
 
-        
-    #    HSTEP, VSTEP = 13, 18
-    #    cursor_x, cursor_y = HSTEP, VSTEP
-    #    for c in text:
-    #        self.canvas.create_text(cursor_x, cursor_y, text=c)
-    #        cursor_x += HSTEP
-    #        if cursor_x >= WIDTH - HSTEP:
-    #            cursor_y += VSTEP
-    #            cursor_x = HSTEP
+    def on_click(self, e):
+        self.dragging = e.x >= WIDTH - HSTEP
+
+    def on_drag(self, e):
+        if self.dragging:
+            self.scroll = max(0, min(e.y * self.max_height / HEIGHT, self.max_height - HEIGHT))
+            self.draw()
 
 def layout(text):
     display_list = []
