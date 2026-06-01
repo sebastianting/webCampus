@@ -2,6 +2,7 @@ import socket
 import ssl
 import time
 import gzip
+from dataclasses import dataclass
 
 class URL:
 
@@ -56,13 +57,13 @@ class URL:
     def _request(self, redirect_count):
         if redirect_count > 12:
             raise Exception("Too many redirects")
-        
+
         use_scheme = self.inner_scheme if self.scheme == "view-source" else self.scheme
-        
+
         if self.scheme == "file":
             with open(self.path, 'r', encoding="utf-8") as file:
                 return file.read()
-        
+
         if self.scheme in ["data", "about"]:
             return self.path
 
@@ -148,32 +149,47 @@ class URL:
 
         return content.decode("utf-8")
 
+@dataclass
+class Text:
+    text: str
+@dataclass
+class Tag:
+    tag: str
+
+
 entity_map = {
     '&lt;' : '<',
     '&rt;' : '>',
 }
 
 def lex(body):
+    out = []
     in_tag = False
     i = 0
-    text = ""
+    buffer = ""
     while i < len(body):
         if body[i] == '<':
             in_tag = True
+            if buffer: out.append(Text(buffer))
+            buffer = ""
         elif body[i] == '>':
             in_tag = False
+            out.append(Tag(buffer))
+            buffer = ""
         elif not in_tag:
             if body[i] == '&':
                 end = body.find(';', i)
                 if end != -1:
                     entity = body[i:end+1]
-                    text += entity_map.get(entity, entity,)
+                    buffer += entity_map.get(entity, entity,)
                     i = end + 1
                     continue
 
-            text += body[i]
+            buffer += body[i]
         i += 1
-    return text
+    if not in_tag and buffer:
+        out.append(Text(buffer))
+    return out
 
 def source(body):
     print(body)
