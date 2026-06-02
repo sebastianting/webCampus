@@ -192,7 +192,11 @@ def lex(body):
     return out
 
 def source(body):
-    print(body)
+    out = []
+
+    out.append(Text(body))
+
+    return out
 
 if __name__ == "__main__":
     import sys

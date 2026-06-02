@@ -8,7 +8,10 @@ HSTEP, VSTEP = 13, 18
 
 SCROLL_STEP = 100
 
+
 class Browser:
+
+
     def __init__(self):
         self.window = tkinter.Tk()
         self.canvas = tkinter.Canvas(
@@ -28,14 +31,14 @@ class Browser:
     def load(self, url):
         body = url.request()
         if url.scheme == "view-source":
-            self.text = source(body)
+            self.tokens = source(body)
         elif url.scheme == "about":
             if body == "blank":
-                self.text = [""]
+                self.tokens = []
         else:
-            self.text = lex(body)
-        self.display_list = layout(self.text)
-        self.max_height = self.display_list[-1][1]
+            self.tokens = lex(body)
+        self.display_list = Layout(self.tokens).display_list
+        self.max_height = self.display_list[-1][1] if self.display_list else HEIGHT
         self.draw()
 
     def draw(self):
@@ -80,8 +83,8 @@ class Browser:
         global WIDTH, HEIGHT
         WIDTH = e.width
         HEIGHT = e.height
-        self.display_list = layout(self.text)
-        self.max_height = self.display_list[-1][1]
+        self.display_list = Layout(self.tokens).display_list
+        self.max_height = self.display_list[-1][1] if self.display_list else HEIGHT
         self.draw()
 
     def on_click(self, e):
@@ -92,38 +95,58 @@ class Browser:
             self.scroll = max(0, min(e.y * self.max_height / HEIGHT, self.max_height - HEIGHT))
             self.draw()
 
-def layout(tokens):
-    font = tkinter.font.Font()
-    display_list = []
 
-    weight = "normal"
-    style = "roman"
+class Layout:
+    def __init__(self, tokens):
+        self.display_list = []
+        self.cursor_x = HSTEP
+        self.cursor_y = VSTEP
+        self.weight = "normal"
+        self.style = "roman"
+        for tok in tokens:
+            self.token(tok)
 
-    cursor_x, cursor_y = HSTEP, VSTEP
-    for tok in tokens:
+    def token(self, tok):
         if isinstance(tok, Text):
             for word in tok.text.split():
-                font = tkinter.font.Font(
-                    size=16,
-                    weight=weight,
-                    slant=style,
-                )
-                w = font.measure(word)
-                if cursor_x + w > WIDTH - HSTEP:
-                    cursor_y += font.metrics("linespace") * 1.25
-                    cursor_x = HSTEP
-                display_list.append((cursor_x, cursor_y, word, font))
-                cursor_x += w + font.measure(" ")
+                self.word(word)
         elif tok.tag == "i":
-            style = "italic"
+            self.style = "italic"
         elif tok.tag == "/i":
-            style = "roman"
+            self.style = "roman"
         elif tok.tag == "b":
-            weight = "bold"
+            self.weight = "bold"
         elif tok.tag == "/b":
-            weight = "normal"
+            self.weight = "normal"
 
-    return display_list
+    def word(self, word):
+        font = tkinter.font.Font()
+        font = tkinter.font.Font(
+            size=16,
+            weight=self.weight,
+            slant=self.style,
+        )
+        w = font.measure(word)
+        if self.cursor_x + w > WIDTH - HSTEP:
+            self.cursor_y += font.metrics("linespace") * 1.25
+            self.cursor_x = HSTEP
+        self.display_list.append((self.cursor_x, self.cursor_y, word, font))
+        self.cursor_x += w + font.measure(" ")
+
+
+
+#
+#FONTS = {}
+#
+#def get_font(size, weight, style):
+#    key = (size, weight, style)
+#    if key not in FONTS:
+#        font = tkinter.font.Font(size=size, weight=weight,
+#                                 slant=style)
+#        label = tkinter.Label(font=font)
+#        FONTS[key] = (font, label)
+#    return FONTS[key][0]
+        
 
 if __name__ == "__main__":
     import sys
