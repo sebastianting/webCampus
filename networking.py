@@ -160,6 +160,9 @@ class Tag:
 entity_map = {
     '&lt;' : '<',
     '&rt;' : '>',
+    '&gt;' : '>',
+    '&quot;' : '"',
+    '&#39;' : '\'',
 }
 
 def lex(body):
