@@ -176,6 +176,8 @@ def lex(body):
             in_tag = False
             out.append(Tag(buffer))
             buffer = ""
+        elif in_tag:
+            buffer += body[i]
         elif not in_tag:
             if body[i] == '&':
                 end = body.find(';', i)
