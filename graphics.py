@@ -1,6 +1,6 @@
 import tkinter
 import tkinter.font
-from networking import URL, lex, source, Text, Tag
+from networking import URL, source, Text, Element, HTMLParser
 
 WIDTH, HEIGHT = 800, 600
 
@@ -29,14 +29,14 @@ class Browser:
 
     def load(self, url):
         body = url.request()
-        if url.scheme == "view-source":
-            self.tokens = source(body)
+        if url.scheme == "view-source": # FIXME: adapt to the tree method
+            self.nodes = source(body)
         elif url.scheme == "about":
             if body == "blank":
-                self.tokens = []
+                self.nodes = []
         else:
-            self.tokens = lex(body)
-        self.display_list = Layout(self.tokens).display_list
+            self.nodes = HTMLParser(body).parse()
+        self.display_list = Layout(self.nodes).display_list
         self.max_height = self.display_list[-1][1] if self.display_list else HEIGHT
         self.draw()
 
@@ -82,7 +82,7 @@ class Browser:
         global WIDTH, HEIGHT
         WIDTH = e.width
         HEIGHT = e.height
-        self.display_list = Layout(self.tokens).display_list
+        self.display_list = Layout(self.nodes).display_list
         self.max_height = self.display_list[-1][1] if self.display_list else HEIGHT
         self.draw()
 
@@ -105,42 +105,49 @@ class Layout:
         self.style = "roman"
         self.size = 12
         self.centered = False
-        for tok in tokens:
-            self.token(tok)
+        self.recurse(tokens)
         self.flush()
 
-    def token(self, tok):
-        if isinstance(tok, Text):
-            for word in tok.text.split():
-                self.word(word)
-        elif tok.tag == "i":             # if else if else
+    def open_tag(self, tag):
+        if tag == "i":
             self.style = "italic"
-        elif tok.tag == "/i":
-            self.style = "roman"
-        elif tok.tag == "b":
+        elif tag == "b":
             self.weight = "bold"
-        elif tok.tag == "/b":
-            self.weight = "normal"
-        elif tok.tag == "small":
+        elif tag == "small":
             self.size -= 2
-        elif tok.tag == "/small":
-            self.size += 2
-        elif tok.tag == "big":
+        elif tag == "big":
             self.size += 4
-        elif tok.tag == "/big":
-            self.size -= 4
-        elif tok.tag == "br":
+        elif tag == "br":
             self.flush()
-        elif tok.tag == "/p":
+        elif tag.startswith("h1"): # not mentioned in book, may break
+            self.centered = True
+
+    def close_tag(self, tag):
+        if tag == "i":
+            self.style = "roman"
+        elif tag == "b":
+            self.weight = "normal"
+        elif tag == "small":
+            self.size += 2
+        elif tag == "big":
+            self.size -= 4
+        elif tag == "p":
             self.flush()
             self.cursor_y += VSTEP
-        elif tok.tag == 'h1 class="title"':
-            self.centered = True
-        elif tok.tag.startswith("h1"): # not mentioned in book, may break
-            self.centered = True
-        elif tok.tag == "/h1":
+        elif tag == "h1":
             self.flush()
             self.centered = False
+
+    def recurse(self, tree):
+        if isinstance(tree, Text):
+            for word in tree.text.split():
+                self.word(word)
+        else:
+            self.open_tag(tree.tag)
+            for child in tree.children:
+                self.recurse(child)
+            self.close_tag(tree.tag)
+
 
     def word(self, word):
         font = get_font(self.size, self.weight, self.style)
@@ -167,9 +174,6 @@ class Layout:
         self.cursor_x = HSTEP
         self.line = []
 
-
-
-
 FONTS = {}
 
 def get_font(size, weight, style):
@@ -180,7 +184,7 @@ def get_font(size, weight, style):
         label = tkinter.Label(font=font)
         FONTS[key] = (font, label)
     return FONTS[key][0]
-        
+
 
 if __name__ == "__main__":
     import sys

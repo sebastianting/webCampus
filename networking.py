@@ -2,7 +2,7 @@ import socket
 import ssl
 import time
 import gzip
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 class URL:
 
@@ -152,9 +152,21 @@ class URL:
 @dataclass
 class Text:
     text: str
+    parent: 'Text' = None
+    children: list = field(default_factory=list)
+
+    def __repr__(self):
+        return repr(self.text)
+
 @dataclass
-class Tag:
+class Element:
     tag: str
+    attributes: dict[str, str]
+    parent: 'Element' = None
+    children: list = field(default_factory=list)
+
+    def __repr__(self):
+        return "<" + self.tag + ">"
 
 
 entity_map = {
@@ -165,43 +177,107 @@ entity_map = {
     '&#39;' : '\'',
 }
 
-def lex(body):
-    out = []
-    in_tag = False
-    i = 0
-    buffer = ""
-    while i < len(body):
-        if body[i] == '<':
-            in_tag = True
-            if buffer: out.append(Text(buffer))
-            buffer = ""
-        elif body[i] == '>':
-            in_tag = False
-            out.append(Tag(buffer))
-            buffer = ""
-        elif in_tag:
-            buffer += body[i]
-        elif not in_tag:
-            if body[i] == '&':
-                end = body.find(';', i)
-                if end != -1:
-                    entity = body[i:end+1]
-                    buffer += entity_map.get(entity, entity,)
-                    i = end + 1
-                    continue
-
-            buffer += body[i]
-        i += 1
-    if not in_tag and buffer:
-        out.append(Text(buffer))
-    return out
-
 def source(body):
     out = []
 
     out.append(Text(body))
 
     return out
+
+
+class HTMLParser:
+
+    SELF_CLOSING_TAGS = [
+        "area", "base", "br", "col", "embed", "hr", "img", "input",
+        "link", "meta", "param", "source", "track", "wbr",
+    ]
+
+    def __init__(self, body):
+        self.body = body
+        self.unfinished = []
+
+    def get_attributes(self, text):
+        parts = text.split()
+        tags = parts[0].casefold()
+        attributes = {}
+        for attrpair in parts[1:]:
+            if "=" in attrpair:
+                key, value = attrpair.split("=", 1)
+                if len(value) > 2 and value[0] in ["'", "\""]:
+                    value = value[1:-1]
+                attributes[key.casefold()] = value
+
+            else:
+                attributes[attrpair.casefold()] = ""
+        return tags, attributes
+
+    def parse(self):
+        text = ""
+        i = 0
+        in_tag = False
+        while i < len(self.body):
+            c = self.body[i]
+            if c == '<':
+                in_tag = True
+                if text: self.add_text(text)
+                text = ""
+            elif c == ">":
+                in_tag = False
+                self.add_tag(text)
+                text = ""
+            elif in_tag:
+                text += c
+            elif not in_tag:
+                if c == '&':
+                    end = self.body.find(';', i)
+                    if end != -1:
+                        entity = self.body[i:end+1]
+                        text += entity_map.get(entity, entity,)
+                        i = end + 1
+                        continue
+                text += c
+            i += 1
+        if not in_tag and text:
+            self.add_text(text)
+        return self.finish()
+
+    def add_text(self, text):
+        if text.isspace(): return
+
+        parent = self.unfinished[-1]
+        node = Text(text, parent)
+        parent.children.append(node)
+
+    def add_tag(self, tag):
+        tag, attributes = self.get_attributes(tag)
+        if tag.startswith("!"): return
+
+        if tag.startswith("/"):
+            if len(self.unfinished) == 1: return 
+            node = self.unfinished.pop()
+            parent = self.unfinished[-1]
+            parent.children.append(node)
+        elif tag in self.SELF_CLOSING_TAGS:
+            parent = self.unfinished[-1]
+            node = Element(tag, attributes, parent)
+            parent.children.append(node)
+        else:
+            parent = self.unfinished[-1] if self.unfinished else None
+            node = Element(tag, attributes, parent)
+            self.unfinished.append(node)
+
+    def finish(self):
+        while len(self.unfinished) > 1:
+            node = self.unfinished.pop()
+            parent = self.unfinished[-1]
+            parent.children.append(node)
+        return self.unfinished.pop()
+
+def print_tree(node, indent=0):
+    print(" " * indent, node)
+    for child in node.children:
+        print_tree(child, indent + 2)
+
 
 if __name__ == "__main__":
     import sys
@@ -212,5 +288,7 @@ if __name__ == "__main__":
         load(URL(url_string))
         sys.exit()
 
-    load(URL(" ".join(sys.argv[1:])))
+    body = URL(sys.argv[1]).request()
+    nodes = HTMLParser(body).parse()
+    print_tree(nodes)
 
