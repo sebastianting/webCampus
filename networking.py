@@ -226,6 +226,12 @@ class HTMLParser:
                 in_tag = True
                 if text: self.add_text(text)
                 text = ""
+                if self.body[i:i+4] == "<!--":
+                    end = self.body.find("-->", 1)
+                    if end != -1:
+                        i = end + 3
+                        in_tag = False
+                        continue
             elif c == ">":
                 in_tag = False
                 self.add_tag(text)
