@@ -197,6 +197,11 @@ class HTMLParser:
         "link", "meta", "title", "style", "script",
     ]
 
+    IMPLICIT_CLOSE_TAGS = {
+        "p": ["p"],
+        "li": ["li"],
+    }
+
     def __init__(self, body):
         self.body = body
         self.unfinished = []
@@ -264,6 +269,13 @@ class HTMLParser:
         tag, attributes = self.get_attributes(tag)
         if tag.startswith("!"): return
         self.implicit_tags(tag)
+
+        if tag in self.IMPLICIT_CLOSE_TAGS:
+            while self.unfinished and self.unfinished[-1].tag in self.IMPLICIT_CLOSE_TAGS:
+                node = self.unfinished.pop()
+                parent = self.unfinished[-1]
+                parent.children.append(node)
+
 
         if tag.startswith("/"):
             if len(self.unfinished) == 1: return 
