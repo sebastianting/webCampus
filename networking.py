@@ -232,9 +232,16 @@ class HTMLParser:
                 if text: self.add_text(text)
                 text = ""
                 if self.body[i:i+4] == "<!--":
-                    end = self.body.find("-->", 1)
+                    end = self.body.find("-->", i)
                     if end != -1:
                         i = end + 3
+                        in_tag = False
+                        continue
+                if self.body[i:i+8] == "<script>":
+                    end = self.body.find("</script>", i)
+                    if end != -1:
+                        self.add_text(self.body[i:end])
+                        i = end
                         in_tag = False
                         continue
             elif c == ">":
