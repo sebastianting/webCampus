@@ -1,6 +1,6 @@
 import tkinter
 import tkinter.font
-from networking import URL, source, Text, Element, HTMLParser
+from networking import URL, source, Text, Element, HTMLParser, print_tree
 
 WIDTH, HEIGHT = 800, 600
 
@@ -39,10 +39,11 @@ class Browser:
 
         self.document = DocumentLayout(self.nodes)
         self.document.layout()
-        self.display_list = self.document.display_list
+        print_tree(self.document)
+        #self.display_list = self.document.display_list
 
         #self.max_height = self.display_list[-1][1] if self.display_list else HEIGHT
-        self.draw()
+        #self.draw()
 
     def draw(self):
         self.canvas.delete("all")
@@ -100,6 +101,14 @@ class Browser:
             self.scroll = max(0, min(e.y * self.max_height / HEIGHT, self.max_height - HEIGHT))
             self.draw()
 
+BLOCK_ELEMENTS = [
+    "html", "body", "article", "section", "nav", "aside",
+    "h1", "h2", "h3", "h4", "h5", "h6", "hgroup", "header",
+    "footer", "address", "p", "hr", "pre", "blockquote",
+    "ol", "ul", "menu", "li", "dl", "dt", "dd", "figure",
+    "figcaption", "main", "div", "table", "form", "fieldset",
+    "legend", "details", "summary"
+]
 
 class BlockLayout:
     def __init__(self, node, parent, previous):
@@ -110,15 +119,38 @@ class BlockLayout:
 
     def layout(self):
         self.display_list = []
-        self.line = []
-        self.cursor_x = HSTEP
-        self.cursor_y = VSTEP
-        self.weight = "normal"
-        self.style = "roman"
-        self.size = 12
-        self.centered = False
-        self.recurse(self.node)
-        self.flush()
+        mode = self.layout_mode()
+        if mode == "block":
+            previous = None
+            for child in self.node.children:
+                next = BlockLayout(child, self, previous)
+                self.children.append(next)
+                previous = next
+        else:
+            self.display_list = []
+            self.line = []
+            self.cursor_x = HSTEP
+            self.cursor_y = VSTEP
+            self.weight = "normal"
+            self.style = "roman"
+            self.size = 12
+            self.centered = False
+            self.recurse(self.node)
+            self.flush()
+        for child in self.children:
+            child.layout()
+
+    def layout_mode(self):
+        if isinstance(self.node, Text):
+            return "inline"
+        elif any ([isinstance(child, Element) and \
+                   child.tag in BLOCK_ELEMENTS
+                for child in self.node.children]):
+            return "block"
+        elif self.node.children:
+            return "inline"
+        else:
+            return "block"
 
     def open_tag(self, tag):
         if tag == "i":
@@ -166,7 +198,7 @@ class BlockLayout:
         w = font.measure(word)
         if self.cursor_x + w > WIDTH - HSTEP:
             self.flush()
-        #self.display_list.append((self.cursor_x, self.cursor_y, word, font))
+        self.display_list.append((self.cursor_x, self.cursor_y, word, font))
         self.line.append((self.cursor_x, word, font))
         self.cursor_x += w + font.measure(" ")
 
