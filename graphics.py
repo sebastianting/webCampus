@@ -36,8 +36,12 @@ class Browser:
                 self.nodes = []
         else:
             self.nodes = HTMLParser(body).parse()
-        self.display_list = Layout(self.nodes).display_list
-        self.max_height = self.display_list[-1][1] if self.display_list else HEIGHT
+
+        self.document = DocumentLayout(self.nodes)
+        self.document.layout()
+        self.display_list = self.document.display_list
+
+        #self.max_height = self.display_list[-1][1] if self.display_list else HEIGHT
         self.draw()
 
     def draw(self):
@@ -47,11 +51,11 @@ class Browser:
             if y + VSTEP < self.scroll: continue
             self.canvas.create_text(x, y - self.scroll, text=c, anchor = "nw", font=f)
 
-        if self.max_height > HEIGHT:
-            thumb_height = HEIGHT * HEIGHT / self.max_height
-            thumb_top = self.scroll * HEIGHT / self.max_height
-            thumb_bot = thumb_top + thumb_height
-            self.canvas.create_rectangle(WIDTH - HSTEP, thumb_top, WIDTH, thumb_bot, fill='#5A99F0', width=0, activefill='#63BFF5')
+        #if self.max_height > HEIGHT:
+        #    thumb_height = HEIGHT * HEIGHT / self.max_height
+        #    thumb_top = self.scroll * HEIGHT / self.max_height
+        #    thumb_bot = thumb_top + thumb_height
+        #    self.canvas.create_rectangle(WIDTH - HSTEP, thumb_top, WIDTH, thumb_bot, fill='#5A99F0', width=0, activefill='#63BFF5')
 
     def onscroll(self, e):
         if e.delta > 0:
@@ -82,7 +86,9 @@ class Browser:
         global WIDTH, HEIGHT
         WIDTH = e.width
         HEIGHT = e.height
-        self.display_list = Layout(self.nodes).display_list
+        self.document = DocumentLayout(self.nodes)
+        self.document.layout()
+        self.display_list = self.document.display_list
         self.max_height = self.display_list[-1][1] if self.display_list else HEIGHT
         self.draw()
 
@@ -95,8 +101,14 @@ class Browser:
             self.draw()
 
 
-class Layout:
-    def __init__(self, tokens):
+class BlockLayout:
+    def __init__(self, node, parent, previous):
+        self.node = node
+        self.parent = parent
+        self.previous = previous
+        self.children = []
+
+    def layout(self):
         self.display_list = []
         self.line = []
         self.cursor_x = HSTEP
@@ -105,7 +117,7 @@ class Layout:
         self.style = "roman"
         self.size = 12
         self.centered = False
-        self.recurse(tokens)
+        self.recurse(self.node)
         self.flush()
 
     def open_tag(self, tag):
@@ -173,6 +185,18 @@ class Layout:
         self.cursor_y = baseline + 1.25 * max_descent
         self.cursor_x = HSTEP
         self.line = []
+
+class DocumentLayout:
+    def __init__(self, node):
+        self.node = node
+        self.parent = None
+        self.children = []
+
+    def layout(self):
+        child = BlockLayout(self.node, self, None)
+        self.children.append(child)
+        child.layout()
+        self.display_list = child.display_list
 
 FONTS = {}
 
