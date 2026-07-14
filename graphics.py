@@ -39,7 +39,9 @@ class Browser:
 
         self.document = DocumentLayout(self.nodes)
         self.document.layout()
-        print_tree(self.document)
+        self.display_list = []
+        paint_tree(self.document, self.display_list)
+        self.draw()
         #self.display_list = self.document.display_list
 
         #self.max_height = self.display_list[-1][1] if self.display_list else HEIGHT
@@ -89,9 +91,9 @@ class Browser:
         HEIGHT = e.height
         self.document = DocumentLayout(self.nodes)
         self.document.layout()
-        self.display_list = self.document.display_list
-        self.max_height = self.display_list[-1][1] if self.display_list else HEIGHT
-        self.draw()
+        #        self.display_list = self.document.display_list
+        #self.max_height = self.display_list[-1][1] if self.display_list else HEIGHT
+        #self.draw()
 
     def on_click(self, e):
         self.dragging = e.x >= WIDTH - HSTEP
@@ -116,9 +118,20 @@ class BlockLayout:
         self.parent = parent
         self.previous = previous
         self.children = []
+        self.x = None
+        self.y = None
+        self.width = None
+        self.height = None
 
     def layout(self):
         self.display_list = []
+        self.x = self.parent.x
+        self.width = self.parent.width
+        if self.previous:
+            self.y = self.previous.y + self.previous.height
+        else:
+            self.y = self.parent.y
+
         mode = self.layout_mode()
         if mode == "block":
             previous = None
@@ -126,19 +139,25 @@ class BlockLayout:
                 next = BlockLayout(child, self, previous)
                 self.children.append(next)
                 previous = next
+
+            for child in self.children:
+                child.layout()
+
+            self.height = sum([
+                child.height for child in self.children
+            ])
         else:
             self.display_list = []
             self.line = []
-            self.cursor_x = HSTEP
-            self.cursor_y = VSTEP
+            self.cursor_x = 0
+            self.cursor_y = 0
             self.weight = "normal"
             self.style = "roman"
             self.size = 12
             self.centered = False
+            self.height = self.cursor_y
             self.recurse(self.node)
             self.flush()
-        for child in self.children:
-            child.layout()
 
     def layout_mode(self):
         if isinstance(self.node, Text):
@@ -192,13 +211,15 @@ class BlockLayout:
                 self.recurse(child)
             self.close_tag(tree.tag)
 
+    def paint(self):
+        return self.display_list
+
 
     def word(self, word):
         font = get_font(self.size, self.weight, self.style)
         w = font.measure(word)
-        if self.cursor_x + w > WIDTH - HSTEP:
+        if self.cursor_x + w > self.width:
             self.flush()
-        self.display_list.append((self.cursor_x, self.cursor_y, word, font))
         self.line.append((self.cursor_x, word, font))
         self.cursor_x += w + font.measure(" ")
 
@@ -207,15 +228,16 @@ class BlockLayout:
         metrics = [font.metrics() for x, word, font, in self.line]
         max_ascent = max([metric["ascent"] for metric in metrics])
         baseline = self.cursor_y + 1.25 * max_ascent
-        for x, word, font in self.line:
+        for rel_x, word, font in self.line:
+            x = self.x + rel_x
+            y = self.y + baseline - font.metrics("ascent")
+            self.display_list.append((x, y, word, font))
             if self.centered:
                 offset = (WIDTH - HSTEP - self.cursor_x) / 2
                 x += offset
-            y = baseline - font.metrics("ascent")
-            self.display_list.append((x, y, word, font))
         max_descent = max([metric["descent"] for metric in metrics])
         self.cursor_y = baseline + 1.25 * max_descent
-        self.cursor_x = HSTEP
+        self.cursor_x = 0
         self.line = []
 
 class DocumentLayout:
@@ -223,12 +245,22 @@ class DocumentLayout:
         self.node = node
         self.parent = None
         self.children = []
+        self.x = None
+        self.y = None
+        self.width = None
+        self.height = None
 
     def layout(self):
         child = BlockLayout(self.node, self, None)
         self.children.append(child)
+        self.width = WIDTH - 2 * HSTEP
+        self.x = HSTEP
+        self.y = VSTEP
         child.layout()
-        self.display_list = child.display_list
+        self.height = child.height
+
+    def paint(self):
+        return []
 
 FONTS = {}
 
@@ -240,6 +272,12 @@ def get_font(size, weight, style):
         label = tkinter.Label(font=font)
         FONTS[key] = (font, label)
     return FONTS[key][0]
+
+def paint_tree(layout_object, display_list):
+    display_list.extend(layout_object.paint())
+
+    for child in layout_object.children:
+        paint_tree(child, display_list)
 
 
 if __name__ == "__main__":
