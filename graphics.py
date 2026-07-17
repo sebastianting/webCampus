@@ -88,9 +88,7 @@ class Browser:
         HEIGHT = e.height
         self.document = DocumentLayout(self.nodes)
         self.document.layout()
-        #        self.display_list = self.document.display_list
-        #self.max_height = self.display_list[-1][1] if self.display_list else HEIGHT
-        #self.draw()        self.display_list = []
+        self.display_list = []
         paint_tree(self.document, self.display_list)
         self.max_height = self.document.height
         self.draw()
