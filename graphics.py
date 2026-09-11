@@ -130,6 +130,10 @@ class BlockLayout:
         else:
             self.y = self.parent.y
 
+        if isinstance(self.node, Element) and self.node.tag == "li":
+            self.x = self.x + 2 * HSTEP
+            self.width = self.width - 2 * HSTEP
+
         mode = self.layout_mode()
         if mode == "block":
             previous = None
@@ -214,6 +218,17 @@ class BlockLayout:
         if isinstance(self.node, Element) and self.node.tag == "pre":
             x2, y2 = self.x + self.width, self.y + self.height
             rect = DrawRect(self.x, self.y, x2, y2, "gray")
+            cmds.append(rect)
+        if isinstance(self.node, Element) and self.node.tag == "nav":
+            if self.node.attributes.get("class") == "links":
+
+                x2, y2 = self.x + self.width, self.y + self.height
+                rect = DrawRect(self.x, self.y, x2, y2, "gray")
+                cmds.append(rect)
+        if isinstance(self.node, Element) and self.node.tag == "li":
+            x1, y1 = self.x - HSTEP, self.y + 8
+            x2, y2 = x1 + 5, y1 + 5
+            rect = DrawRect(x1, y1, x2, y2, "gray")
             cmds.append(rect)
         if self.layout_mode() == "inline":
             for x, y, word, font in self.display_list:
