@@ -111,8 +111,8 @@ BLOCK_ELEMENTS = [
 ]
 
 class BlockLayout:
-    def __init__(self, node, parent, previous):
-        self.node = node
+    def __init__(self, nodes, parent, previous):
+        self.nodes = nodes # we take multiple nodes the case of anonymous block boxes
         self.parent = parent
         self.previous = previous
         self.children = []
@@ -130,15 +130,34 @@ class BlockLayout:
         else:
             self.y = self.parent.y
 
-        if isinstance(self.node, Element) and self.node.tag == "li":
-            self.x = self.x + 2 * HSTEP
-            self.width = self.width - 2 * HSTEP
+        if len(self.nodes) == 1:
+            node = self.nodes[0]
+            if isinstance(node, Element) and node.tag == "li":
+                self.x = self.x + 2 * HSTEP
+                self.width = self.width - 2 * HSTEP
 
         mode = self.layout_mode()
         if mode == "block":
+            node = self.nodes[0]
             previous = None
-            for child in self.node.children:
-                next = BlockLayout(child, self, previous)
+            inline_nodes = []
+            for child in node.children:
+                if (isinstance(child, Element) and child.tag not in BLOCK_ELEMENTS) \
+                    or isinstance(child, Text):
+                    inline_nodes.append(child)
+
+                else:
+                    if inline_nodes:
+                        next = BlockLayout(inline_nodes, self, previous)
+                        self.children.append(next)
+                        previous = next
+                        inline_nodes = []
+
+                    next = BlockLayout([child], self, previous)
+                    self.children.append(next)
+                    previous = next
+            if inline_nodes:
+                next = BlockLayout(inline_nodes, self, previous)
                 self.children.append(next)
                 previous = next
 
@@ -157,18 +176,24 @@ class BlockLayout:
             self.style = "roman"
             self.size = 12
             self.centered = False
-            self.recurse(self.node)
+            print("INLINE NODES ", self.nodes)
+            for node in self.nodes:
+                print("RECURSNG", node)
+                self.recurse(node)
             self.flush()
             self.height = self.cursor_y
 
     def layout_mode(self):
-        if isinstance(self.node, Text):
+        node = self.nodes[0]
+        if len(self.nodes) != 1:
+            return "inline"
+        if isinstance(node, Text):
             return "inline"
         elif any ([isinstance(child, Element) and \
                    child.tag in BLOCK_ELEMENTS
-                for child in self.node.children]):
+                for child in node.children]):
             return "block"
-        elif self.node.children:
+        elif node.children:
             return "inline"
         else:
             return "block"
@@ -215,21 +240,24 @@ class BlockLayout:
 
     def paint(self):
         cmds = []
-        if isinstance(self.node, Element) and self.node.tag == "pre":
-            x2, y2 = self.x + self.width, self.y + self.height
-            rect = DrawRect(self.x, self.y, x2, y2, "gray")
-            cmds.append(rect)
-        if isinstance(self.node, Element) and self.node.tag == "nav":
-            if self.node.attributes.get("class") == "links":
+        node = self.nodes[0]
+        if len(self.nodes) == 1:
 
+            if isinstance(node, Element) and node.tag == "pre":
                 x2, y2 = self.x + self.width, self.y + self.height
                 rect = DrawRect(self.x, self.y, x2, y2, "gray")
                 cmds.append(rect)
-        if isinstance(self.node, Element) and self.node.tag == "li":
-            x1, y1 = self.x - HSTEP, self.y + 8
-            x2, y2 = x1 + 5, y1 + 5
-            rect = DrawRect(x1, y1, x2, y2, "gray")
-            cmds.append(rect)
+            if isinstance(node, Element) and node.tag == "nav":
+                if self.node.attributes.get("class") == "links":
+
+                    x2, y2 = self.x + self.width, self.y + self.height
+                    rect = DrawRect(self.x, self.y, x2, y2, "gray")
+                    cmds.append(rect)
+            if isinstance(node, Element) and node.tag == "li":
+                x1, y1 = self.x - HSTEP, self.y + 8
+                x2, y2 = x1 + 5, y1 + 5
+                rect = DrawRect(x1, y1, x2, y2, "gray")
+                cmds.append(rect)
         if self.layout_mode() == "inline":
             for x, y, word, font in self.display_list:
                 cmds.append(DrawText(x, y, word, font))
@@ -299,7 +327,7 @@ class DocumentLayout:
         self.height = None
 
     def layout(self):
-        child = BlockLayout(self.node, self, None)
+        child = BlockLayout([self.node], self, None)
         self.children.append(child)
         self.width = WIDTH - 2 * HSTEP
         self.x = HSTEP
