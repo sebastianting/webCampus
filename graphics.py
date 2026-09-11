@@ -176,9 +176,7 @@ class BlockLayout:
             self.style = "roman"
             self.size = 12
             self.centered = False
-            print("INLINE NODES ", self.nodes)
             for node in self.nodes:
-                print("RECURSNG", node)
                 self.recurse(node)
             self.flush()
             self.height = self.cursor_y
@@ -248,7 +246,7 @@ class BlockLayout:
                 rect = DrawRect(self.x, self.y, x2, y2, "gray")
                 cmds.append(rect)
             if isinstance(node, Element) and node.tag == "nav":
-                if self.node.attributes.get("class") == "links":
+                if node.attributes.get("class") == "links":
 
                     x2, y2 = self.x + self.width, self.y + self.height
                     rect = DrawRect(self.x, self.y, x2, y2, "gray")
